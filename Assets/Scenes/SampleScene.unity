@@ -536,6 +536,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 45d26f185b38baf47b94fe5b5173528e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  initiateOnAwake: 1
   generatePoints: 0
   boardSetup: {fileID: 11400000, guid: 67ca461123623b84894a63a3d8abb33e, type: 2}
   history: {fileID: 11400000, guid: 719a7271af1d11d4fb6dd3db85122f68, type: 2}
