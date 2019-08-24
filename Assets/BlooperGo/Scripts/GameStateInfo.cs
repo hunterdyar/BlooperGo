@@ -26,7 +26,7 @@ namespace Blooper.Go{
         //uhg
         public void ResetGameState(){
             passedLastTurn = StoneColor.none;
-            turnNumber = 0;
+            turnNumber = 1;
             currentTurn = StoneColor.black;
             gameOver = false;
             blackPrisonersCapturedByWhite = 0;

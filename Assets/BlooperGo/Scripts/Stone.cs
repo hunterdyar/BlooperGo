@@ -8,6 +8,7 @@ namespace Blooper.Go{
         public Point point;
         public Chain chain = null;
         public StoneColor color;
+        public int turnNumberPlayed;
         //chain
         public bool captured = false;
 

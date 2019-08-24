@@ -15,7 +15,7 @@ public class GoInfoTextUpdater : MonoBehaviour
     }
     void Update()
     {
-        text.text = "Turn: "+gameStateInfo.currentTurn.ToString();
+        text.text = "Turn "+gameStateInfo.turnNumber+": "+gameStateInfo.currentTurn.ToString();
         text.text = text.text+"\n\n";
         text.text = text.text+"white: "+gameStateInfo.whitePointsArea;
         text.text = text.text+"\nblack: "+gameStateInfo.blackPointsArea;

@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using System.Linq;
 using Blooper.SOA;
 namespace Blooper.Go{
 public enum StoneColor{
@@ -49,10 +50,16 @@ public class Go : MonoBehaviour
     [Tooltip("Fires out whenever you try a move, with an int that tells you error code of the move.")]
     public IntGameEvent TurnResponseCodeEvent;
 
-    [Tooltip("The following stones need to be removed for some reason (likely: captured)")]
     
+    [Tooltip("The following stones need to be removed for some reason (likely: captured)")]
+
     public StoneGameEvent RemovedStoneEvent;
-    [Tooltip("Required. Fires when the game is reset, (and on awake) so you know when to reset all the visuals.")]
+    [Tooltip("Whatever stones is at this position needs to be removed. Fired same as above. Use whichever suites you or not at all. ")]
+    
+    public Vector2GameEvent RemoveStoneAtPositionEvent;
+
+    [Tooltip("Fires when the game is reset, (and on awake) so you know when to reset all the visuals.")]
+
     public GameEvent ResetGameBoardEvent;
 
     [Tooltip("Fires when the game is over. A bool in the game state gets flipped too you can check")]
@@ -98,13 +105,21 @@ public class Go : MonoBehaviour
         //Reset info-storing game objects.
         history.ResetHistory();
         gsi.ResetGameState();
-        yield return new WaitForEndOfFrame();
         if(ResetGameBoardEvent != null){
             ResetGameBoardEvent.Raise();
         }
         yield return null;
     }
 
+    public void Undo(){
+        Debug.Log("undo to "+(gsi.turnNumber-2));
+        if(gsi.turnNumber > 1){//1 is when the first turn. 
+            TurnDetails turn = history.GetTurnDetials(gsi.turnNumber -2);
+                gsi.currentTurn = OtherColor(turn.player);
+                RevertToPreviousTurn(gsi.turnNumber - 2);
+                gsi.turnNumber = gsi.turnNumber-1;
+        }
+    }
     public void CurrentPlayerResigns(){
         gsi.gameOver = true;
         //gsi.Tally();//This currently only sets the winner, so not needed. But with scoring math, if I update that... we may want to call it then override the winner
@@ -184,6 +199,7 @@ public class Go : MonoBehaviour
                 Stone s = new Stone();
                 s.color = color;
                 s.point = point;
+                s.turnNumberPlayed = gsi.turnNumber;
                 point.stoneHere = s;
 
                 //Oop i have to do ALL OF THIS like three times for a snapback? uh oh//edit this didnt change anything but should have tho, so i'm leaving it.
@@ -301,6 +317,7 @@ public class Go : MonoBehaviour
 
                 
                 allStones.Add(s);
+                //
                 if(color == StoneColor.black){
                     blackStones.Add(s);
                 }else{
@@ -316,7 +333,7 @@ public class Go : MonoBehaviour
 
                 //Increment the turn counter, switch the player turns.
 
-                history.AddToHistory(gsi.turnNumber,s,GameStateFromStonesList(allStones));
+                history.AddToHistory(gsi.turnNumber,s,GameStateFromStonesList(allStones),boardSetup);
                 gsi.turnNumber++;
                 gsi.currentTurn = OtherColor(gsi.currentTurn);
                 //Call Stone event to visually place a stone.
@@ -341,7 +358,77 @@ public class Go : MonoBehaviour
             return;
         }
     }
+    void RevertToPreviousTurn(int turnNumber){
+        Debug.Log("reverting");
+        int[] newStonesInt = history.GetGameStateByTurn(turnNumber);
+        List<Stone> newStones = StonesFromGameState(newStonesInt,boardSetup);
 
+        Debug.Log(newStones.Count + " - "+ allStones.Count);
+        List<Stone> stonesToAdd = new List<Stone>();
+        List<Stone> stonesToRemove = new List<Stone>();
+        foreach(Stone s in newStones){
+            bool addThisOne = true;
+
+            foreach(Stone z in allStones){
+
+                if(CompareStones(s,z)){
+                    //okay, so a stone with the same color and position is already in this list. we dont need to add our stone.
+                    //all stones does have the stone we are checking, so we do not need to add it.
+                    addThisOne = false;
+                    break;
+                }
+            }
+            if(addThisOne){
+                stonesToAdd.Add(s);
+            }
+        }
+        foreach(Stone s in allStones){
+            bool removeThisOne = true;
+            foreach(Stone z in newStones){
+                if(CompareStones(s,z)){
+                    //okay, so a stone with the same color and position is already in this list. we dont need to add our stone.
+                    //new stones does not have the stone we are checking, thus we need to remove it.
+                    removeThisOne = false;
+                    break;
+                }
+            }
+            if(removeThisOne){
+                stonesToRemove.Add(s);
+            }
+        }
+        foreach(Stone s in stonesToAdd){
+            Debug.Log("add a stone");
+            allStones.Add(s);
+            NewStonePlayedEvent.Raise(s);
+            if(s.color == StoneColor.black){
+                blackStones.Add(s);
+            }else if(s.color == StoneColor.white){
+                whiteStones.Add(s);
+            }
+        }
+        foreach(Stone s in stonesToRemove){
+            Debug.Log("remove a stone");
+            Stone x = FindEquivalentStoneInList(s,allStones);
+            allStones.Remove(x); 
+            x.point.stoneHere = null;
+
+            //these lists may be borked.
+            if(blackStones.Contains(s)){
+                blackStones.Remove(s);
+            }
+            if(whiteStones.Contains(s)){
+                whiteStones.Remove(s);
+            }
+            if(RemovedStoneEvent != null){
+                RemovedStoneEvent.Raise(s);
+            }else if(RemoveStoneAtPositionEvent != null){
+                RemoveStoneAtPositionEvent.Raise(s.point.position);
+            }else{
+                Debug.LogError("You need at least one remove stone event defined");
+            }
+        }
+
+    }
     public void DefineChains(){
         chains.Clear();
         foreach(Stone s in allStones){
@@ -498,18 +585,37 @@ public class Go : MonoBehaviour
         }
     }
 
-    public int[] GameStateFromStonesList(List<Stone> stones){
-        //the game state is stored as an int[] that is like a triangle vertices array.
-        //its x,y,v,x2,y2,v2,x3,y3,v3, etc.
-        //This way it doesnt stays small with small boards, and doesnt count empty points. Which makes comparators quicker.
-        int[] gsint = new int[stones.Count*3];
+    public static int[] GameStateFromStonesList(List<Stone> stones){
+        //the game state is stored as an int[] that is like a triangle vertices array, but a quad.
+        //its turn,x,y,v,turn2,x2,y2,v2,turn3,x3,y3,v3, etc.
+        //This way it stays small with small boards: it doesnt count empty points. Which makes comparators and operations quicker for most of the game.
+        //The current system deletes captured stones. I am not sure that it's important to keep those, because I've got turn numbers here.
+        //Originally I assumed turn numbers by sorting the list, before remembering that some stones were just gone.
+
+
+        int[] gsint = new int[stones.Count*4];
         for(int i = 0;i < stones.Count;i++){
-            gsint[i*3] =  (int)stones[i].point.position.x;
-            gsint[i*3+1]= (int)stones[i].point.position.y;
-            gsint[i*3+2]= StoneColorToInt(stones[i]);
+            gsint[i*4] =  stones[i].turnNumberPlayed;
+            gsint[i*4+1]= (int)stones[i].point.position.x;
+            gsint[i*4+2]= (int)stones[i].point.position.y;
+            gsint[i*4+3]= StoneColorToInt(stones[i].color);
         }
 
         return gsint;
+    }
+
+    //Some explanation here: 
+    public static List<Stone> StonesFromGameState(int[] gs, BoardSetup board){
+        List<Stone> stones = new List<Stone>();
+        for(int i = 0; i<gs.Length;i = i+4){
+            Stone s = new Stone();
+            s.turnNumberPlayed = gs[i];
+            s.point = board.GetPoint(new Vector2(gs[i+1],gs[i+2]));
+            board.GetPoint(new Vector2(gs[i+1],gs[i+2])).stoneHere = s;
+            s.color = IntToStoneColor(gs[i+3]);
+            stones.Add(s);
+        }
+        return stones;
     }
 
     public static StoneColor OtherColor(StoneColor c){
@@ -522,20 +628,44 @@ public class Go : MonoBehaviour
             return StoneColor.none;
         }
     }
-    public static int StoneColorToInt(Stone s){
-        if(s == null){
-            return 0;
-        }
-        if(s.color == StoneColor.black){
+    public static int StoneColorToInt(StoneColor sc){
+        if(sc == StoneColor.black){
             return 1;
-        }else if(s.color == StoneColor.white){
+        }else if(sc == StoneColor.white){
             return 2;
         }else{
             return 0;
         }
     }
-
-    
+    public static StoneColor IntToStoneColor(int x){
+        if(x == 1){
+            return StoneColor.black;
+        }else if(x == 2){
+            return StoneColor.white;
+        }else{
+            return StoneColor.none;
+        }
+    }
+    public static bool CompareStones(Stone a,Stone b){
+        if(a == null & b == null){
+            return true;//???? I GUESS?
+        }
+        if(a == null){
+            return false;
+        }
+        if(b == null){
+            return false;
+        }
+        return (a.turnNumberPlayed == b.turnNumberPlayed) && (a.color == b.color) && ((int)a.point.position.x == (int)b.point.position.x) && ((int)a.point.position.y == (int)b.point.position.y);
+    }
+    public Stone FindEquivalentStoneInList(Stone equivalentStone,List<Stone> checkStones){
+        foreach(Stone s in checkStones){
+            if(CompareStones(equivalentStone,s)){
+                return s;
+            }
+        }
+        return null;
+    }
 }
 
 }
