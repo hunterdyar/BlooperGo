@@ -46,3 +46,14 @@ sysinfo.txt
 
 # Crashlytics generated file
 crashlytics-build.properties
+
+Assets/Project Planner/*
+Assets/Project Planner.meta
+Packages
+Project Planner
+ProjectSettings/
+Assets/Plugins/
+Assets/Plugins.meta
+.vscode
+.collabignore
+
