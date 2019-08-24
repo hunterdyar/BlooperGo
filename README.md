@@ -7,7 +7,7 @@ This project is designed to do most of the "game" part of creating a Go game - l
 
 ## Important Background
 The short version is that you can add various "Game Event listeners" and "Game Events" that you give the same asset. One script can raise the event, and the other will recieve it, and thanks to UnityEvent serialization, it's trivial to make that event call a function.
-This minimizes dependencies (some of the events are optional, for example), and provides a clean interface to interact with the go logic.
+This minimizes dependencies (It's okay if an event has no listeners, or a listener and nothing calling it). This provides a clean interface to interact with the game logic.
 
 There are two namespaces used, Blooper.Go, where all of the go logic lives, and Blooper.SOA, which is where the scriptable object unityEvent architecture lives. 
 For more info on how or what Blooper.SOA does or why, see [this talk](https://www.youtube.com/watch?v=raQ3iHhE_Kk). 
