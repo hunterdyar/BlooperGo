@@ -1,5 +1,7 @@
 # BlooperGo
-Go game implementation in Unity. Game logic abstracted away from interface.
+Go game implementation in Unity. Game logic abstracted away from interface. It uses Area Scoring because that was easier to implement.
+
+[Wikipedia page on go](https://en.wikipedia.org/wiki/Go_(game))
 
 This project is designed to do most of the "game" part of creating a Go game - leaving the interface up to others. End-goal is perhaps to use it in support of a study with VR or AR interfaces.
 
