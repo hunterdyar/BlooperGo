@@ -24,6 +24,9 @@ public class Go : MonoBehaviour
     public List<Territory> territories;
     [Header("Settings")]
 
+    [Tooltip("Initiate on awake? Leave checked if you don't know")]
+    public bool initiateOnAwake = true;
+
     [Tooltip("see boardSetup for settings. Tells the boardSetup to generate points before calling the pre-initiate function that you can use to give those points worldPos's or whatever.")]
     public bool generatePoints;
     [Header("Game Data Holders")]
@@ -59,7 +62,9 @@ public class Go : MonoBehaviour
     public StoneColor previouslyPlayedColor = StoneColor.white;
 
     void Awake(){
-        Init();
+        if(initiateOnAwake){
+            Init();
+        }
     }
     public void Init(){
         StartCoroutine(Initiate());
