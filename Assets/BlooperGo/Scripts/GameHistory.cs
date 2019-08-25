@@ -7,6 +7,7 @@ namespace Blooper.Go{
 [System.Serializable]
 public struct TurnDetails{
     public int turnNumber;
+    public int stonesCapturedThisTurn;
     public StoneColor player;
     public Vector2 playPosition;
     public char columnAsLetter;
@@ -29,24 +30,16 @@ public struct TurnDetails{
             gameHistory[0] = td;
             turnNumber = 1;
         }
-        public void AddToHistory(int turnNumber, Stone s){
+
+
+        public void AddToHistory(int turnNumber, Stone s, int stonesCaptued,int[] gameState, BoardSetup board){
             TurnDetails turnDetails = new TurnDetails();
             turnDetails.turnNumber = turnNumber;
             turnDetails.player = s.color;
-            turnDetails.playPosition = s.point.position;
-            turnDetails.columnAsLetter = GetColumnLetter((int)s.point.position.x);
-            turnDetails.rowAsNumber = (int)s.point.position.x+1;
-            gameHistory[turnNumber] = turnDetails;
-
-        }
-
-        public void AddToHistory(int turnNumber, Stone s, int[] gameState, BoardSetup board){
-            TurnDetails turnDetails = new TurnDetails();
-            turnDetails.turnNumber = turnNumber;
-            turnDetails.player = s.color;
-            turnDetails.playPosition = s.point.position;
-            turnDetails.columnAsLetter = GetColumnLetter((int)s.point.position.x);
-            turnDetails.rowAsNumber = (int)s.point.position.x+1;
+            turnDetails.stonesCapturedThisTurn = stonesCaptued;
+            turnDetails.playPosition = s.position;
+            turnDetails.columnAsLetter = GetColumnLetter((int)s.position.x);
+            turnDetails.rowAsNumber = (int)s.position.x+1;
             turnDetails.gameState = gameState;
             gameHistory[turnNumber] = turnDetails;
         }

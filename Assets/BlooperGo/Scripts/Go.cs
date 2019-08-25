@@ -14,11 +14,7 @@ public class Go : MonoBehaviour
 
 
     [HideInInspector]
-    public List<Stone> allStones;
-    [HideInInspector]
-    public List<Stone> blackStones;
-    [HideInInspector]
-    public List<Stone> whiteStones;
+    public List<Point> allStones;
     [HideInInspector]
     public List<Chain> chains;
     [HideInInspector]
@@ -65,9 +61,7 @@ public class Go : MonoBehaviour
     [Tooltip("Fires when the game is over. A bool in the game state gets flipped too you can check")]
     public GameEvent GameEndedEvent;
 
-    [Header("Other")]
-    public StoneColor previouslyPlayedColor = StoneColor.white;
-
+    private int stonesCapturedThisTurn = 0;
     void Awake(){
         if(initiateOnAwake){
             Init();
@@ -97,11 +91,10 @@ public class Go : MonoBehaviour
         yield return new WaitForEndOfFrame();
 
         //Reset local whatswhat.
-        allStones = new List<Stone>();
-        blackStones = new List<Stone>();
-        whiteStones = new List<Stone>();
+        allStones = new List<Point>();
         chains = new List<Chain>();
         territories = new List<Territory>();
+        
         //Reset info-storing game objects.
         history.ResetHistory();
         gsi.ResetGameState();
@@ -155,7 +148,6 @@ public class Go : MonoBehaviour
     }
 
     public void PlaceStone(Vector2 position,StoneColor color){
-        
         if(gsi.gameOver){
            // Debug.Log("sorry, can't make a move, the game is over!");
             if(TurnResponseEvent != null){
@@ -176,11 +168,9 @@ public class Go : MonoBehaviour
             }
             return;
         }
-
-        Point point = null;
-        point = boardSetup.GetPoint(position);
+        Point point = boardSetup.GetPoint(position);
         if(point != null){
-            if(point.stoneHere != null){
+            if(point.stone.color != StoneColor.none){
                // Debug.Log("Can't Place stone here!");
                 if(TurnResponseEvent != null){
                 TurnResponseEvent.Raise(false);
@@ -191,78 +181,101 @@ public class Go : MonoBehaviour
                 return;
             }else{
                 
-
+            
+            
+            stonesCapturedThisTurn = 0;
+            //Suicide and snapback checks
+                Chain g = null; 
                 //I deleted the suicide check for immediate neighbors, because chain liberties should check that anywayyyy?
         
-
-                //Start adding the stone...
-                Stone s = new Stone();
-                s.color = color;
-                s.point = point;
-                s.turnNumberPlayed = gsi.turnNumber;
-                point.stoneHere = s;
+                //this is a soft "add" while we do out checks, and we will need to undo them on failures.
+                point.stone.color = color;
+                point.stone.turnNumberPlayed = gsi.turnNumber;
 
                 //Oop i have to do ALL OF THIS like three times for a snapback? uh oh//edit this didnt change anything but should have tho, so i'm leaving it.
                 //I think it fixes a bug that i hadnt found yet, with previously defined chains boofing the addNieghborsToChain function, which checks for null chains and add those only so it isnt infinitly recursive
                 //we might be able to check this not with the stone.chain property but if the list in the addneighbros list already contains the stone or not, and get rid of this foreach
                 if(chains != null){//We initialize in a coroutine, so it's possible to try to play in the first few frames and boof everything up.
                     chains.Clear();
-                    foreach(Stone e in allStones){
-                        e.chain = null;
+
+                    for(int i =0;i<allStones.Count;i++){
+                        allStones[i].stone.chain = null;
                     }
                 }
-                ///
-/// 
+
                 //need to check if the chain we place our stone in, without direct suicide, would become a suicide. That's still invalid.
                 Chain c = new Chain();
                 chains.Add(c);
-                s.chain = c;
-                c.stones.Add(s);
-                c.color = s.color;
-                AddNeighborsToChain(s,c);//This is recursive.
+                point.stone.chain = c;
+                point.stone.chain.stones.Add(point);
+                c.color = point.stone.color;
+                AddNeighborsToChain(point,c);//This is recursive.
 
-                //we delete the single suicide check because the chain can be lenght 1 and that was redundant anyway.
-
-                //TODO snapback checks!?
+                //snapback checks
+                bool snapback = false;
 
                 c.DefineLiberties();//get all open ajacent spots to the chain.
                 if(c.liberties.Count == 0){
                     //Invalid?
-                    bool snapback = false;
 
-                        ///Check if any enemies surrounding the point WOULD be captured. 
-                        List<Stone> enemyNeighbors = GetEnemyNeighbors(s);
+                        //Check if any enemies surrounding the point WOULD be captured. 
+                        
+                                //Begin the process of clearing all of our chains.
+                                chains.Clear();
+                                for(int i =0;i<allStones.Count;i++){
+                                    allStones[i].stone.chain = null;
+                                }
+                                //We will have to do this clearing again. it's not optimized code.
 
-                        //Begin the process of clearing all of our chains.
-                        chains.Clear();
-                        foreach(Stone e in allStones){
-                            e.chain = null;
-                        }
-                        //We will have to do this again. it's not optimized code.
-
-                        foreach(Stone e in enemyNeighbors){
+                        //First we get the enemies surrounding the point.
+                        List<Point> enemyNeighbors = GetEnemyNeighbors(point, color);
+                        for(int i = 0;i<enemyNeighbors.Count;i++){
                             //e is the enemy surrounding the stone we just placed.
 
                             //First we get the surrounding chain. 
-                            Chain g = new Chain();//I picked g because it rhymes with c dont @ me.
-                            //chains.Add(g);//not neccesary, since it will all get cleared before we use this? but it feels like i should have it in the list anyway?
+                            g = new Chain();                            
 
-                            if(e.chain == null){
-                                e.chain = g;
-                                g.stones.Add(e);
-                                g.color = e.color;
-                                AddNeighborsToChain(e,g);//This is recursive.
+                            if(enemyNeighbors[i].stone.chain == null){
+                                enemyNeighbors[i].stone.chain = g;
+                                g.stones.Add(enemyNeighbors[i]);
+                                g.color = enemyNeighbors[i].stone.color;
+                                AddNeighborsToChain(enemyNeighbors[i],g);//This is recursive.
                             }
-
+                        //So we check if the surrounding enemy neighbor chain has no more liberties now.
                             if(g.stones.Count != 0){
                                 g.DefineLiberties();
                             }
 
                             if(g.liberties.Count == 0 && g.stones.Count > 0){
-                                //okay, so we CAN place this point!
+                                //okay, so we CAN place this point.... MAYBE
+
                                 // Debug.Log("Snapback?");
                                 snapback = true;
-                                Capture(g);//capture this now because otherwise when we do it later it wont know which chain to capture, and probably capture both?
+                            
+                                //KO rule
+                                    // One may not capture just one stone if that stone was played on the previous move and that move also captured just one stone.
+                                    if(snapback && g.stones.Count == 1){
+                                    //ko rule always happens during snapback (???) 
+                                        if(history.gameHistory[gsi.turnNumber-1].stonesCapturedThisTurn == 1){
+                                            if(g.stones[0].stone.turnNumberPlayed == gsi.turnNumber-1){
+                                                
+                                                //undo our placement
+                                                point.stone.color = StoneColor.none;//undo our placement 
+                                                point.stone.chain = null;
+                                                point.stone.turnNumberPlayed = -1;
+                                                if(TurnResponseEvent != null){
+                                                    TurnResponseEvent.Raise(false);
+                                                }
+                                                if(TurnResponseCodeEvent != null){
+                                                    TurnResponseCodeEvent.Raise(6);
+                                                }
+                                                return;
+                                            }
+                                        }
+                                    }
+
+
+                               Capture(g);//capture this on before we run the chain iteration but after ko rule because otherwise when we do it later it wont know which chain to capture, and probably capture both?
                                 //We can do the rest from below, let it do the rest of the chains (i mean, does it need to?) and calculate points and all that.
                                 break;//if we break ... is it possible to snapback two chains at once?
                             }
@@ -272,8 +285,8 @@ public class Go : MonoBehaviour
 /// 
                     if(!snapback){
                     ///
-                        point.stoneHere = null;//undo
-                        s = null;//get ready to garbage collect.
+                        point.stone.color = StoneColor.none;//undo our placement 
+                        point.stone.chain = null;
                        // Debug.Log("Cant place stone here, chain suicide!");
                         if(TurnResponseEvent != null){
                             TurnResponseEvent.Raise(false);
@@ -290,40 +303,14 @@ public class Go : MonoBehaviour
                 //EXCEPT we might have to do a history state storing and comparing thing ANYWAY because of ko rule.
 
                 //end suicide and snapbacks.
+                
+                  
+                    //which feels more ... systematicc
 
-                ///KO rule
-                /// 
-                
-                
-                List<Stone> possibleAllStones = new List<Stone>(allStones);
-                possibleAllStones.Add(s);
-                int[] possibleHistory = GameStateFromStonesList(possibleAllStones);
-                
-                if(gsi.turnNumber-2 >= 0){                    
-                    IStructuralEquatable se1 = possibleHistory;
-//Next returns True
-                    if(se1.Equals (history.GetGameStateByTurn(gsi.turnNumber-2), StructuralComparisons.StructuralEqualityComparer)){
-                        //Debug.Log("Ko rule! Cant return game to previous state.");
-                        if(TurnResponseEvent != null){
-                            TurnResponseEvent.Raise(false);
-                        }
-                        if(TurnResponseCodeEvent != null){
-                            TurnResponseCodeEvent.Raise(6);
-                        }
-                        return;
-                    } 
-                }
+
+
                 //place stone
-
-                
-                allStones.Add(s);
-                //
-                if(color == StoneColor.black){
-                    blackStones.Add(s);
-                }else{
-                    whiteStones.Add(s);
-                }
-                previouslyPlayedColor = color;
+                allStones.Add(point);
                 //end placing stone
 
                 DefineChains();//Defining chains starts the ball rolling on our capture logic too.
@@ -331,21 +318,21 @@ public class Go : MonoBehaviour
 
                 UpdateTerritoryCounts();//Does a number of recursive things, including going off and tallying the points.
 
-                //Increment the turn counter, switch the player turns.
 
-                history.AddToHistory(gsi.turnNumber,s,GameStateFromStonesList(allStones),boardSetup);
+                history.AddToHistory(gsi.turnNumber,point.stone,stonesCapturedThisTurn,GameStateFromStonesList(allStones),boardSetup);
+                stonesCapturedThisTurn = 0;
+                //Increment the turn counter, switch the player turns.
                 gsi.turnNumber++;
                 gsi.currentTurn = OtherColor(gsi.currentTurn);
                 //Call Stone event to visually place a stone.
                
-                NewStonePlayedEvent.Raise(s);
+                NewStonePlayedEvent.Raise(point.stone);
                 if(TurnResponseEvent != null){
                     TurnResponseEvent.Raise(true);
                 }
                 if(TurnResponseCodeEvent != null){
                     TurnResponseCodeEvent.Raise(1);
                 }
-                history.AddToHistory(gsi.turnNumber,s);
             }
         }else{
            // Debug.Log("Invalid Position, no point at: "+ position);
@@ -359,21 +346,14 @@ public class Go : MonoBehaviour
         }
     }
     void RevertToPreviousTurn(int turnNumber){
-        Debug.Log("reverting");
         int[] newStonesInt = history.GetGameStateByTurn(turnNumber);
-        List<Stone> newStones = StonesFromGameState(newStonesInt,boardSetup);
-
-        Debug.Log(newStones.Count + " - "+ allStones.Count);
-        List<Stone> stonesToAdd = new List<Stone>();
-        List<Stone> stonesToRemove = new List<Stone>();
-        foreach(Stone s in newStones){
+        List<Point> newStones = StonesFromGameState(newStonesInt,boardSetup);
+        List<Point> stonesToAdd = new List<Point>();
+        List<Point> stonesToRemove = new List<Point>();
+        foreach(Point s in newStones){
             bool addThisOne = true;
-
-            foreach(Stone z in allStones){
-
-                if(CompareStones(s,z)){
-                    //okay, so a stone with the same color and position is already in this list. we dont need to add our stone.
-                    //all stones does have the stone we are checking, so we do not need to add it.
+            foreach(Point z in allStones){
+                if(CompareStones(s.stone,z.stone,false)){
                     addThisOne = false;
                     break;
                 }
@@ -382,10 +362,10 @@ public class Go : MonoBehaviour
                 stonesToAdd.Add(s);
             }
         }
-        foreach(Stone s in allStones){
+        foreach(Point s in allStones){
             bool removeThisOne = true;
-            foreach(Stone z in newStones){
-                if(CompareStones(s,z)){
+            foreach(Point z in newStones){
+                if(CompareStones(s.stone,z.stone,false)){
                     //okay, so a stone with the same color and position is already in this list. we dont need to add our stone.
                     //new stones does not have the stone we are checking, thus we need to remove it.
                     removeThisOne = false;
@@ -396,33 +376,20 @@ public class Go : MonoBehaviour
                 stonesToRemove.Add(s);
             }
         }
-        foreach(Stone s in stonesToAdd){
-            Debug.Log("add a stone");
-            allStones.Add(s);
-            NewStonePlayedEvent.Raise(s);
-            if(s.color == StoneColor.black){
-                blackStones.Add(s);
-            }else if(s.color == StoneColor.white){
-                whiteStones.Add(s);
-            }
+        foreach(Point s in stonesToAdd){
+            Point p = boardSetup.GetPoint(s.position);
+            p = s;
+            allStones.Add(p);
+            NewStonePlayedEvent.Raise(s.stone);
         }
-        foreach(Stone s in stonesToRemove){
-            Debug.Log("remove a stone");
-            Stone x = FindEquivalentStoneInList(s,allStones);
-            allStones.Remove(x); 
-            x.point.stoneHere = null;
+        foreach(Point p in stonesToRemove){
+            allStones.Remove(p); 
+            p.stone.color = StoneColor.none;
 
-            //these lists may be borked.
-            if(blackStones.Contains(s)){
-                blackStones.Remove(s);
-            }
-            if(whiteStones.Contains(s)){
-                whiteStones.Remove(s);
-            }
             if(RemovedStoneEvent != null){
-                RemovedStoneEvent.Raise(s);
+                RemovedStoneEvent.Raise(p.stone);
             }else if(RemoveStoneAtPositionEvent != null){
-                RemoveStoneAtPositionEvent.Raise(s.point.position);
+                RemoveStoneAtPositionEvent.Raise(p.position);
             }else{
                 Debug.LogError("You need at least one remove stone event defined");
             }
@@ -431,18 +398,18 @@ public class Go : MonoBehaviour
     }
     public void DefineChains(){
         chains.Clear();
-        foreach(Stone s in allStones){
-            s.chain = null;
+        for(int i =0;i<allStones.Count;i++){
+            allStones[i].stone.chain = null;
         }
-        //lol how does garbage collection work? do i need to... delete those chains?
-        foreach(Stone s in allStones){
-            if(s.chain == null){//at the end of this, every stone should be part of a chain.
+        for(int i =0;i<allStones.Count;i++){
+            
+            if(allStones[i].stone.chain == null){//at the end of this, every stone should be part of a chain.
                 Chain c = new Chain();
                 chains.Add(c);
-                s.chain = c;
-                c.stones.Add(s);
-                c.color = s.color;
-                AddNeighborsToChain(s,c);
+                allStones[i].stone.chain = c;
+                c.stones.Add(allStones[i]);
+                c.color = allStones[i].stone.color;
+                AddNeighborsToChain(allStones[i],c);
             }
         }
         foreach(Chain c in chains){
@@ -453,26 +420,27 @@ public class Go : MonoBehaviour
         }
     }
 
-    public void AddNeighborsToChain(Stone s, Chain c){
-        List<Stone> sn = GetSameColoredNeighbors(s);
-        foreach(Stone news in sn){
-            if(news.chain == null){
-                news.chain = c;
-                c.stones.Add(news);
-                AddNeighborsToChain(news,c);
+    public void AddNeighborsToChain(Point p, Chain c){
+        List<Point> pl = GetSameColoredNeighbors(p);
+        for(int i =0;i<pl.Count;i++){
+            if(pl[i].stone.chain != c){
+                pl[i].stone.chain = c;
+                pl[i].stone=pl[i].stone;//probably not needed.
+                c.stones.Add(pl[i]);
+                AddNeighborsToChain(pl[i],c);
             }
         }
     }
     public void AddNeighborsToTerritory(Territory t, Point p){
         List<Point> pn = p.neighbors;
         foreach(Point newp in p.neighbors){
-            if(newp.territory == null){//we dont want to go back and forth between 2 neighbors.
-                if(newp.stoneHere != null){//we hit some kind of wall!
+            if(newp.territory != t){//we dont want to go back and forth between 2 neighbors.
+                if(newp.stone.color != StoneColor.none){//we hit some kind of wall!
                     if(!t.isOwnerDefined){//first stone we hit in the floodFill.
                         t.isOwnerDefined = true;//We will say that the territory is defined and owned by this color.
-                        t.territoryOwner = newp.stoneHere.color;
+                        t.territoryOwner = newp.stone.color;
                     }else{
-                        if(t.territoryOwner != newp.stoneHere.color){
+                        if(t.territoryOwner != newp.stone.color){
                             t.territoryOwner = StoneColor.none;
                         }
                     }
@@ -491,7 +459,7 @@ public class Go : MonoBehaviour
         }
         //lol how does garbage collection work? do i need to... delete those chains?
         foreach(Point p in boardSetup.points.Values){
-            if(p.stoneHere == null && p.territory == null){//at the end of this, every point not occupied by a stone should be part of a territory.
+            if(p.stone.color == StoneColor.none && p.territory == null){//at the end of this, every point not occupied by a stone should be part of a territory.
                 Territory t = new Territory();
                 t.isOwnerDefined = false;//we dont know who owns this territory yet.
                 territories.Add(t);
@@ -512,23 +480,23 @@ public class Go : MonoBehaviour
         }
         
     }
-    public static List<Stone> GetSameColoredNeighbors(Stone s){
-        List<Stone> sameColoredNeighbors = new List<Stone>();
-        foreach(Point p in s.point.neighbors){
-            if(p.stoneHere != null){
-                if(p.stoneHere.color == s.color && !s.captured){
-                    sameColoredNeighbors.Add(p.stoneHere);
+    public static List<Point> GetSameColoredNeighbors(Point s){
+        List<Point> sameColoredNeighbors = new List<Point>();
+        foreach(Point p in s.neighbors){
+            if(p.stone.color != StoneColor.none){
+                if(p.stone.color == s.stone.color){
+                    sameColoredNeighbors.Add(p);
                 }
             }
         }
         return sameColoredNeighbors;
     }
-    public static List<Stone> GetEnemyNeighbors(Stone s){
-        List<Stone> enemyNeighbors = new List<Stone>();
-        foreach(Point p in s.point.neighbors){
-            if(p.stoneHere != null){
-                if(p.stoneHere.color == OtherColor(s.color) && !s.captured){
-                    enemyNeighbors.Add(p.stoneHere);
+    public static List<Point> GetEnemyNeighbors(Point point, StoneColor c){
+        List<Point> enemyNeighbors = new List<Point>();
+        foreach(Point p in point.neighbors){
+            if(p.stone.color != StoneColor.none){
+                if(p.stone.color == OtherColor(c)){
+                    enemyNeighbors.Add(p);
                 }
             }
         }
@@ -537,7 +505,7 @@ public class Go : MonoBehaviour
     public static List<Point> GetEmptyNeighbors(Point point){
         List<Point> emptyNeighbors = new List<Point>();
         foreach(Point p in point.neighbors){
-            if(p.stoneHere == null){//if the nighbor is a liberty.
+            if(p.stone.color == StoneColor.none){//if the nighbor is a liberty.
                 if(!emptyNeighbors.Contains(p)){
                     emptyNeighbors.Add(p);
                 }
@@ -547,26 +515,20 @@ public class Go : MonoBehaviour
     }
 
     public void Capture(Chain c){
-        foreach(Stone s in c.stones){
-            RemovedStoneEvent.Raise(s);
-            s.point.stoneHere = null;
-            s.captured = true;
-            s.point = null;
-            allStones.Remove(s);
-            if(s.color == StoneColor.black){
-                blackStones.Remove(s);
-                gsi.blackPrisonersCapturedByWhite++;
-            }else if(s.color == StoneColor.white){
-                whiteStones.Remove(s);
-                gsi.whitePrisonersCapturedByBlack++;
-            }
+        for(int i = 0;i<c.stones.Count;i++){
+            stonesCapturedThisTurn++;
+            c.stones[i].stone.color = StoneColor.none;
+            c.stones[i].stone.chain = null;
+            allStones.Remove(c.stones[i]);
+            RemovedStoneEvent.Raise(c.stones[i].stone);
         }
-
     }
 
+    
+
     public void UpdateTerritoryCounts(){
-        gsi.whiteStonesOnBoard = whiteStones.Count;
-        gsi.blackStonesOnBoard = blackStones.Count;
+      //  gsi.whiteStonesOnBoard = whiteStones.Count;
+       // gsi.blackStonesOnBoard = blackStones.Count;
         
         if(gsi.whiteStonesOnBoard < 2 || gsi.blackStonesOnBoard<2){
             return;
@@ -585,35 +547,31 @@ public class Go : MonoBehaviour
         }
     }
 
-    public static int[] GameStateFromStonesList(List<Stone> stones){
+    public static int[] GameStateFromStonesList(List<Point> stones){
         //the game state is stored as an int[] that is like a triangle vertices array, but a quad.
         //its turn,x,y,v,turn2,x2,y2,v2,turn3,x3,y3,v3, etc.
         //This way it stays small with small boards: it doesnt count empty points. Which makes comparators and operations quicker for most of the game.
         //The current system deletes captured stones. I am not sure that it's important to keep those, because I've got turn numbers here.
         //Originally I assumed turn numbers by sorting the list, before remembering that some stones were just gone.
-
-
         int[] gsint = new int[stones.Count*4];
         for(int i = 0;i < stones.Count;i++){
-            gsint[i*4] =  stones[i].turnNumberPlayed;
-            gsint[i*4+1]= (int)stones[i].point.position.x;
-            gsint[i*4+2]= (int)stones[i].point.position.y;
-            gsint[i*4+3]= StoneColorToInt(stones[i].color);
+            gsint[i*4] =  stones[i].stone.turnNumberPlayed;
+            gsint[i*4+1]= (int)stones[i].position.x;
+            gsint[i*4+2]= (int)stones[i].position.y;
+            gsint[i*4+3]= StoneColorToInt(stones[i].stone.color);
         }
 
         return gsint;
     }
 
     //Some explanation here: 
-    public static List<Stone> StonesFromGameState(int[] gs, BoardSetup board){
-        List<Stone> stones = new List<Stone>();
+    public static List<Point> StonesFromGameState(int[] gs, BoardSetup board){
+        List<Point> stones = new List<Point>();
         for(int i = 0; i<gs.Length;i = i+4){
-            Stone s = new Stone();
-            s.turnNumberPlayed = gs[i];
-            s.point = board.GetPoint(new Vector2(gs[i+1],gs[i+2]));
-            board.GetPoint(new Vector2(gs[i+1],gs[i+2])).stoneHere = s;
-            s.color = IntToStoneColor(gs[i+3]);
-            stones.Add(s);
+            Point p = board.GetPoint(new Vector2(gs[i+1],gs[i+2]));
+            p.stone.turnNumberPlayed = gs[i];
+            p.stone.color = IntToStoneColor(gs[i+3]);
+            stones.Add(p);
         }
         return stones;
     }
@@ -646,22 +604,43 @@ public class Go : MonoBehaviour
             return StoneColor.none;
         }
     }
-    public static bool CompareStones(Stone a,Stone b){
-        if(a == null & b == null){
-            return true;//???? I GUESS?
-        }
-        if(a == null){
-            return false;
-        }
-        if(b == null){
-            return false;
-        }
-        return (a.turnNumberPlayed == b.turnNumberPlayed) && (a.color == b.color) && ((int)a.point.position.x == (int)b.point.position.x) && ((int)a.point.position.y == (int)b.point.position.y);
+    public static bool CompareStones(Stone a,Stone b, bool considerTurnNumber){
+        return (!considerTurnNumber || a.turnNumberPlayed == b.turnNumberPlayed) && (a.color == b.color) && ((int)a.position.x == (int)b.position.x) && ((int)a.position.y == (int)b.position.y);
     }
-    public Stone FindEquivalentStoneInList(Stone equivalentStone,List<Stone> checkStones){
-        foreach(Stone s in checkStones){
-            if(CompareStones(equivalentStone,s)){
-                return s;
+    public static bool CompareGameStates(int[] a, int[] b, bool considerTurnNumber){
+        if(a.Length != b.Length){
+            //okay first the easy one. 
+            //multiple loops below is kind of fine because like 99% of the time it will be this
+            return false;
+        }
+        //The other way to do this is to check all points locations in a for the same point location in b and if that color matches.
+        //
+
+        int aInb = 0;
+        int bIna = 0;
+        for(int i = 0;i<a.Length;i= i+4){
+            for(int j = 0;j<b.Length;j= j+4){
+                if((!considerTurnNumber || a[i] == b[j]) && a[i+1] == b[j+1] && a[i+2] == b[j+2]&& a[i+3] == b[j+3]){
+                    aInb++;
+                    break;
+                }
+            }
+        }
+        for(int i = 0;i<b.Length;i= i+4){
+            for(int j = 0;j<a.Length;j= j+4){
+                if((!considerTurnNumber || a[i] == b[j]) && a[i+1] == b[j+1] && a[i+2] == b[j+2]&& a[i+3] == b[j+3]){
+                    bIna++;
+                    break;
+                }
+            }
+        }
+        //if the number of a elements found in b is the same as the number of a elements, and vice versa.
+        return (aInb == a.Length/4 && bIna ==b.Length/4);
+    }
+    public Point FindPointFromStoneInList(Stone equivalentStone,List<Point> checkStones){
+        foreach(Point p in checkStones){
+            if(CompareStones(equivalentStone,p.stone,false)){
+                return p;
             }
         }
         return null;

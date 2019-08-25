@@ -44,6 +44,9 @@ namespace Blooper.Go{
             for(int y = 0;y<boardSize.y;y++){
                 Point p = new Point();
                 p.position = new Vector2(x,y);
+                p.stone.color = StoneColor.none;
+                p.stone.position = p.position;//this redundancy is dumb but important for comparing pointless (ha) stones.
+                p.stone.turnNumberPlayed = -1;
                 AddPoint(p);
             }
         }
