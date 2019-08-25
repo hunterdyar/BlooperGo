@@ -7,6 +7,7 @@ namespace Blooper.Go{
 [System.Serializable]
 public struct TurnDetails{
     public int turnNumber;
+    public int stonesCapturedThisTurn;
     public StoneColor player;
     public Vector2 playPosition;
     public char columnAsLetter;
@@ -23,32 +24,36 @@ public struct TurnDetails{
 
         public void ResetHistory(){
             gameHistory.Clear();
-            turnNumber = 0;
+            TurnDetails td = new TurnDetails();//we need to set up the BASE turn, for history reverting.
+            td.player = StoneColor.white;//black plays first. Which means the "previous" turn was white. So it sets the "next" turn to black, by returning white. (its dumb, dont judge me)
+            td.gameState = new int[0];//empty! But we can "check" it and count that there are 0 stones at this state, and not throw an erorr.
+            gameHistory[0] = td;
+            turnNumber = 1;
         }
-        public void AddToHistory(int turnNumber, Stone s){
+
+
+        public void AddToHistory(int turnNumber, Stone s, int stonesCaptued,int[] gameState, BoardSetup board){
             TurnDetails turnDetails = new TurnDetails();
             turnDetails.turnNumber = turnNumber;
             turnDetails.player = s.color;
-            turnDetails.playPosition = s.point.position;
-            turnDetails.columnAsLetter = GetColumnLetter((int)s.point.position.x);
-            turnDetails.rowAsNumber = (int)s.point.position.x+1;
-            gameHistory[turnNumber] = turnDetails;
-
-
-        }
-
-        public void AddToHistory(int turnNumber, Stone s, int[] gameState){
-            TurnDetails turnDetails = new TurnDetails();
-            turnDetails.turnNumber = turnNumber;
-            turnDetails.player = s.color;
-            turnDetails.playPosition = s.point.position;
-            turnDetails.columnAsLetter = GetColumnLetter((int)s.point.position.x);
-            turnDetails.rowAsNumber = (int)s.point.position.x+1;
+            turnDetails.stonesCapturedThisTurn = stonesCaptued;
+            turnDetails.playPosition = s.position;
+            turnDetails.columnAsLetter = GetColumnLetter((int)s.position.x);
+            turnDetails.rowAsNumber = (int)s.position.x+1;
             turnDetails.gameState = gameState;
-
             gameHistory[turnNumber] = turnDetails;
         }
 
+        public TurnDetails GetTurnDetials(int turn){
+            
+            TurnDetails td;
+            if(gameHistory.TryGetValue(turn, out td)){
+                return td;
+            }else{
+                Debug.Log("cant get turn details, invalid turn number");
+                return new TurnDetails();
+            }
+        }
         public int[] GetGameStateByTurn(int turn){
             
             TurnDetails td;
@@ -59,6 +64,7 @@ public struct TurnDetails{
                 return null;
             }
         }
+        
 
         public static char GetColumnLetter(int x){
             string col = "abcdefghijklmnopqrstuvwxyz";

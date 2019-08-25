@@ -4,7 +4,7 @@ using UnityEngine;
 namespace Blooper.Go{
     public class Point
     {
-        public Stone stoneHere = null;
+        public Stone stone;
         public Territory territory;
         public Vector2 position = Vector2.zero;
         public Transform worldTransform = null;

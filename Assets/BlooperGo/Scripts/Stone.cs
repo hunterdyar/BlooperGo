@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using UnityEngine;
 
 namespace Blooper.Go{
-    public class Stone
+    [System.Serializable]
+    public struct Stone
     {
-        public Point point;
-        public Chain chain = null;
+        public Vector2 position;
+        public Chain chain;
         public StoneColor color;
+        public int turnNumberPlayed;
         //chain
-        public bool captured = false;
 
     }
 }
