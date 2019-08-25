@@ -113,9 +113,21 @@ public class Go : MonoBehaviour
                 gsi.turnNumber = gsi.turnNumber-1;
         }
     }
+    void UpdateStoneCounts(){
+        gsi.whiteStonesOnBoard = 0;
+        gsi.blackStonesOnBoard = 0;
+        foreach(Point p in allStones){
+            if(p.stone.color == StoneColor.black){
+                gsi.blackStonesOnBoard++;
+            }else if(p.stone.color == StoneColor.white){
+                gsi.whiteStonesOnBoard++;
+            }
+        }
+        //gsi.Tally();
+    }
     public void CurrentPlayerResigns(){
         gsi.gameOver = true;
-        //gsi.Tally();//This currently only sets the winner, so not needed. But with scoring math, if I update that... we may want to call it then override the winner
+        gsi.Tally();//This currently only sets the winner, so not needed. But with scoring math, if I update that... we may want to call it then override the winner
         gsi.winner = OtherColor(gsi.currentTurn);
     }
 
@@ -527,8 +539,7 @@ public class Go : MonoBehaviour
     
 
     public void UpdateTerritoryCounts(){
-      //  gsi.whiteStonesOnBoard = whiteStones.Count;
-       // gsi.blackStonesOnBoard = blackStones.Count;
+        UpdateStoneCounts();
         
         if(gsi.whiteStonesOnBoard < 2 || gsi.blackStonesOnBoard<2){
             return;

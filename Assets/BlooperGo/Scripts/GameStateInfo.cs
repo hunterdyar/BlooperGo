@@ -46,7 +46,6 @@ namespace Blooper.Go{
             }else if(whitePointsArea>blackPointsArea){
                 winner = StoneColor.white;
             }else{
-                Debug.Log("Draw!");
                 winner = StoneColor.none;
             }
         }
